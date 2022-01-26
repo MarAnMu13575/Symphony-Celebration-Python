@@ -1,0 +1,68 @@
+Orchestra Celebration:
+
+The New York Philharmonic is one of America's largest orchestras. In honor of its many famous musicians, the director is planning a special event. 
+She wants to hold a concert to celebrate the top soloists from its history. You have been asked to determine which soloists should receive recognition.
+
+The director has given you the following requirements:
+
+The results should only include the top 1% of soloists calculated by the total number of concerts performed.
+
+Limit your results to entries where the orchestra is 'New York Philharmonic' and the event type is 'Subscription Season'. 
+Soloist performances in other orchestras or event types should not count towards the calculation of the top soloists.
+
+The director is only interested in individual soloists. You will need to exclude all of the following soloists: 
+Chorus', 'No Soloist', 'New York Choral Artists', 'Schola Cantorum of NY', 'The Camerata Singers'. You should also exclude any soloist with 'choir' in the name.
+
+
+%%sql
+postgresql:///orchestra
+
+from sqlalchemy import create_engine
+import pandas as pd
+engine = create_engine('postgresql:///orchestra')
+
+concerts = pd.read_sql_query("SELECT * FROM concerts", engine)
+concerts.set_index('id',inplace=True)
+
+engine = create_engine('postgresql:///orchestra')
+
+soloists = pd.read_sql_query("SELECT * FROM soloists", engine)
+soloists.set_index('id',inplace=True)
+
+orquesta = pd.merge(concerts, soloists, left_index=True, right_index=True)
+#orquesta.head(2)
+
+orq = orquesta[orquesta.orchestra == 'New York Philharmonic' ]
+orq2 = orq[orq.eventtype == 'Subscription Season']
+#orq2.head(2)
+
+x=['Chorus', 'No Soloist', 'New York Choral Artists', 'Schola Cantorum of NY', 'Camerata Singers, The','Westminster Choir','Westminster Symphonic Choir','American Boychoir, The']
+#orq2.soloist_name.value_counts()
+orq3 = orq2[~orq2.soloist_name.isin(x)]
+#orq3.head()
+
+orq3["date"]= pd.to_datetime(orq3["date"])
+#orq3.head()
+
+orq4 = orq3[['date','soloist_name']]
+#orq4['total_concerts'] = orq4['soloist_name'].value_counts()
+
+y= pd.DataFrame(orq4.soloist_name.value_counts().sort_values(ascending=False))
+y.rename(columns={'soloist_name':'total_concerts'},inplace=True)
+y.shape
+
+df1 = orq4.groupby('soloist_name')['date'].agg(['first','last']).reset_index()
+df1.set_index('soloist_name',inplace=True)
+df1.shape
+
+orquesta2 = pd.merge(df1, y, left_index=True, right_index=True)
+
+orquesta2.reset_index(inplace=True)
+orquesta2.rename(columns={'index':'name','first':'first_date','last':'last_date'},inplace=True)
+xx= orquesta2.sort_values(by='total_concerts',ascending=False).head(29)
+
+xx['name'] = xx['name'].str.split(', ').str[::-1].str.join(' ')
+xx['first_date'] = pd.to_datetime(xx.first_date)
+xx['first_date'] = xx['first_date'].dt.strftime('%d %b %Y')
+xx['last_date'] = xx['last_date'].dt.strftime('%d %b %Y')
+xx
